@@ -1,5 +1,6 @@
 import os
 import logging
+import aioredis
 
 from fastapi import FastAPI, HTTPException, Request
 from service import Service
@@ -7,30 +8,36 @@ from repository import Repository
 from entity import LinkRequest
 from fastapi.responses import RedirectResponse
 
+from fastapi_cache import FastAPICache
+from fastapi_cache.backends.redis import RedisBackend
+from fastapi_cache.decorator import cache
+
 logging.basicConfig(level=logging.INFO)
 
 my_app = FastAPI()
 
 db_url = os.environ.get('DATABASE_URL')
 repo = Repository(db_url)
-
 service = Service(repo)
+redis = aioredis.from_url("redis://localhost", decode_responses=True)
 
 @my_app.on_event("startup")
 async def startup_event():
     await repo.connect()
     await repo.create_table()
+    FastAPICache.init(RedisBackend(redis), prefix="fastapi-cache")
 
 @my_app.on_event("shutdown")
 async def shutdown_event():
     await repo.close()
 
 @my_app.post('/links/shorten')
+@cache(expire=120)
 async def get_short_link(request: Request, link_request: LinkRequest):
     user_id = request.headers.get('X-User-Id')
     token = request.headers.get('Authorization').split()[1] if request.headers.get('Authorization') else None
     
-    logging.info(f"Запрос от пользователя: {user} на создание короткой ссылки")
+    logging.info(f"Запрос от пользователя: {user_id} на создание короткой ссылки")
 
     if user_id and token:
         user = await repo.find_user_by_token_and_id(int(user_id), token)
@@ -56,6 +63,7 @@ async def get_short_link(request: Request, link_request: LinkRequest):
             raise HTTPException(status_code=500, detail="Failed to shorten link")
         
 @my_app.get('/links/{short_code}')
+@cache(expire=120)
 async def redirect_to_original_url(short_code: str):
     short_url = f"https://tinyurl.com/{short_code}"
     logging.info(f"Запрос на переход по короткой ссылке: {short_url}")
@@ -67,6 +75,7 @@ async def redirect_to_original_url(short_code: str):
     
 
 @my_app.delete('/links/{short_code}')
+@cache(expire=0)
 async def delete_link(short_code: str, request: Request):
     user_id = request.headers.get('X-User-Id')
     token = request.headers.get('Authorization').split()[1] if request.headers.get('Authorization') else None
@@ -82,6 +91,7 @@ async def delete_link(short_code: str, request: Request):
         raise HTTPException(status_code=401, detail="Unauthorized")
     
 @my_app.put('/links/{short_code}')
+@cache(expire=0)
 async def update_link(short_code: str, request: Request, link_request: LinkRequest):
     user_id = request.headers.get('X-User-Id')
     token = request.headers.get('Authorization').split()[1] if request.headers.get('Authorization') else None
