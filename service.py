@@ -5,6 +5,8 @@ import string
 
 from repository import Repository
 from typing import Optional
+from fastapi import HTTPException
+from datetime import datetime
 
 logging.basicConfig(level=logging.INFO)
 
@@ -17,32 +19,12 @@ class Service:
             cls._instance.repository = repository
         return cls._instance
 
-    async def create_short_link(self, full_link: str, user_id: int = None, is_authorized: bool = False) -> Optional[dict]:
-        symbols = string.ascii_letters + string.digits
-        max_attempts = 50
-        attempts = 0
-        
-        while attempts < max_attempts:
-            short_link = ''.join(random.choice(symbols) for _ in range(6))
-            
-            if await self.repository.find_original_url_by_short_code(short_link) is None:
-                break
-            attempts += 1
-        
-        if attempts == max_attempts:
-            return None
-        
-        await self.repository.save_link_with_user(full_link, short_link, user_id, is_authorized)
-        
-        return {
-            "status_code": 201,
-            "short_link": short_link
-        }
         
     async def get_original_url(self, short_code: str):
         await self.repository.save_access_statistics(short_code)
         return await self.repository.find_original_url_by_short_code(short_code)
     
+
     async def delete_link(self, short_code: str, user_id: int, token: str) -> bool:
         user = await self.repository.find_user_by_token_and_id(user_id, token)
         if user:
@@ -55,6 +37,7 @@ class Service:
         else:
             return False
         
+
     async def update_url(self, short_code: str, long_url: str, user_id: int, token: str) -> bool:
         user = await self.repository.find_user_by_token_and_id(user_id, token)
         if user:
@@ -88,4 +71,42 @@ class Service:
             return None
         
 
+    async def create_short_link(self, full_link: str, user_id: int = None, is_authorized: bool = False, expires_at: Optional[datetime] = None) -> Optional[dict]:
+        symbols = string.ascii_letters + string.digits
+        max_attempts = 50
+        attempts = 0
+        
+        while attempts < max_attempts:
+            short_link = ''.join(random.choice(symbols) for _ in range(6))
+            
+            if await self.repository.find_original_url_by_short_code(short_link) is None:
+                break
+            attempts += 1
+        
+        if attempts == max_attempts:
+            return None
+        
+        await self.repository.save_link_with_user(full_link, short_link, user_id, is_authorized, expires_at)
+        
+        return {
+            "status_code": 201,
+            "short_link": short_link
+        }
+    
+    
+    async def create_short_link_with_custom_alias(self, full_link: str, custom_alias: str, user_id: int = None, is_authorized: bool = False, expires_at: Optional[datetime] = None) -> Optional[dict]:
+        if await self.repository.find_original_url_by_short_code(custom_alias):
+            raise HTTPException(status_code=400, detail="Alias already exists")
+        
+        await self.repository.save_link_with_user(full_link, custom_alias, user_id, is_authorized, expires_at)
+        
+        return {
+            "status_code": 201,
+            "short_link": custom_alias
+        }
+    
+    
+    async def find_short_link_by_original_url(self, original_url: str) -> Optional[dict]:
+        logging.info("Попали в сервисный класс")
+        return await self.repository.find_short_link_by_original_url(original_url)
     

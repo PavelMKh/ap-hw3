@@ -40,6 +40,7 @@ class Repository:
                     full_link VARCHAR(255) NOT NULL,
                     short_link VARCHAR(255) NOT NULL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    expires_at TIMESTAMP,
                     user_id INTEGER,
                     is_authorized BOOLEAN DEFAULT FALSE
                 );
@@ -68,12 +69,12 @@ class Repository:
                 return None
 
 
-    async def save_link_with_user(self, full_link: str, short_link: str, user_id: int, is_authorized: bool):
+    async def save_link_with_user(self, full_link: str, short_link: str, user_id: int, is_authorized: bool, expires_at):
         async with self.pool.acquire() as conn:
             await conn.execute("""
-                INSERT INTO links (full_link, short_link, user_id, is_authorized)
-                VALUES ($1, $2, $3, $4)
-            """, full_link, short_link, user_id, is_authorized)
+                INSERT INTO links (full_link, short_link, user_id, is_authorized, expires_at)
+                VALUES ($1, $2, $3, $4, $5)
+            """, full_link, short_link, user_id, is_authorized, expires_at)
 
 
     async def find_original_url_by_short_code(self, short_url: str):
@@ -129,6 +130,7 @@ class Repository:
                 VALUES ($1)
             """, short_url)
 
+
     async def get_link_stats(self, short_url: str):
         async with self.pool.acquire() as conn:
             link_info_result = await conn.fetchrow("""
@@ -168,7 +170,31 @@ class Repository:
             }
             
             return jsonable_encoder(stats)
+        
 
+    async def check_alias_availability(self, alias: str) -> bool:
+        return await self.find_original_url_by_short_code(alias) is None
+
+
+    async def find_short_link_by_original_url(self, original_url: str):
+        async with self.pool.acquire() as conn:
+            logging.info("Запрос на поиск ссылки")
+            result = await conn.fetchrow("""
+                SELECT short_link FROM links WHERE full_link = $1
+            """, original_url)
+            logging.info(f"Результат запроса: {result}")
+            if result:
+                return {"short_link": result['short_link']}
+            else:
+                return None
+            
+    
+    async def delete_expired_links(self):
+        async with self.pool.acquire() as conn:
+            await conn.execute("""
+                DELETE FROM links WHERE expires_at IS NOT NULL AND expires_at < CURRENT_TIMESTAMP
+            """)
+            
 
     async def close(self):
         if self.pool:
