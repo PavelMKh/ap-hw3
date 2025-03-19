@@ -12,4 +12,7 @@
 ![alt text](image-2.png)
 
 `PUT /links/{short_code}`
-![alt text](image-3.png)
+![alt text](image-4.png)
+
+`GET /links/{short_code}/stats`
+![alt text](image-5.png)

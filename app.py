@@ -6,7 +6,7 @@ from fastapi import FastAPI, HTTPException, Request
 from service import Service
 from repository import Repository
 from entity import LinkRequest
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, JSONResponse
 
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.redis import RedisBackend
@@ -65,9 +65,8 @@ async def get_short_link(request: Request, link_request: LinkRequest):
 @my_app.get('/links/{short_code}')
 @cache(expire=120)
 async def redirect_to_original_url(short_code: str):
-    short_url = f"https://tinyurl.com/{short_code}"
-    logging.info(f"Запрос на переход по короткой ссылке: {short_url}")
-    original_url = await service.get_original_url(short_url)
+    logging.info(f"Запрос на переход по короткой ссылке: {short_code}")
+    original_url = await service.get_original_url(short_code)
     if original_url:
         return RedirectResponse(url=original_url, status_code=302)
     else:
@@ -105,3 +104,26 @@ async def update_link(short_code: str, request: Request, link_request: LinkReque
             raise HTTPException(status_code=403, detail="Forbidden")
     else:
         raise HTTPException(status_code=401, detail="Unauthorized")
+    
+@my_app.get('/links/{short_code}/stats')
+@cache(expire=120)
+async def get_stats(short_code: str, request: Request):
+    user_id = request.headers.get('X-User-Id')
+    token = request.headers.get('Authorization').split()[1] if request.headers.get('Authorization') else None
+
+    logging.info(f"Запрос от пользователя: {user_id} на предоставление статистики по коду: {short_code}")
+    
+    if not user_id or not token:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    try:
+        user_id_int = int(user_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid user ID")
+
+    stats = await service.get_stats(short_code, user_id_int, token)
+    
+    if stats is None:
+        raise HTTPException(status_code=403, detail="Stats not found")
+    
+    return JSONResponse(content=stats, media_type="application/json")

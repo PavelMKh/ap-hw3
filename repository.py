@@ -1,6 +1,8 @@
 import asyncpg
-
 import logging
+
+from fastapi.encoders import jsonable_encoder
+
 logging.basicConfig(level=logging.INFO)
 
 class Repository:
@@ -40,6 +42,13 @@ class Repository:
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     user_id INTEGER,
                     is_authorized BOOLEAN DEFAULT FALSE
+                );
+            """)
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS statistics (
+                    id SERIAL PRIMARY KEY,
+                    short_link VARCHAR(255) NOT NULL,
+                    access_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
             """)
             await conn.execute("""
@@ -99,6 +108,67 @@ class Repository:
             await conn.execute("""
                 UPDATE links SET full_link = $1 WHERE short_link = $2
             """, long_link, short_link)
+
+    
+    async def get_creation_date_by_short_link(self, short_link: str):
+        async with self.pool.acquire() as conn:
+            result = await conn.fetchrow("""
+                SELECT created_at FROM links WHERE short_link = $1
+            """, short_link)
+            
+            if result:
+                return result['created_at']
+            else:
+                return None
+            
+
+    async def save_access_statistics(self, short_url: str):
+        async with self.pool.acquire() as conn:
+            await conn.execute("""
+                INSERT INTO statistics (short_link)
+                VALUES ($1)
+            """, short_url)
+
+    async def get_link_stats(self, short_url: str):
+        async with self.pool.acquire() as conn:
+            link_info_result = await conn.fetchrow("""
+                SELECT full_link, created_at FROM links WHERE short_link = $1
+            """, short_url)
+            
+            if link_info_result:
+                full_link = link_info_result['full_link']
+                creation_date = link_info_result['created_at']
+            else:
+                return None
+            
+            transitions_count_result = await conn.fetchrow("""
+                SELECT COUNT(*) FROM statistics WHERE short_link = $1
+            """, short_url)
+            
+            if transitions_count_result:
+                transitions_count = transitions_count_result['count']
+            else:
+                transitions_count = 0
+            
+            last_use_date_result = await conn.fetchrow("""
+                SELECT MAX(access_date) FROM statistics WHERE short_link = $1
+            """, short_url)
+            
+            if last_use_date_result and last_use_date_result['max'] is not None:
+                last_use_date = last_use_date_result['max']
+            else:
+                last_use_date = None
+            
+            stats = {
+                "short_url": short_url,
+                "full_url": full_link,
+                "creation_date": creation_date,
+                "transitions_count": transitions_count,
+                "last_use_date": last_use_date
+            }
+            
+            return jsonable_encoder(stats)
+
 
     async def close(self):
         if self.pool:
