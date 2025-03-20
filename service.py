@@ -105,6 +105,10 @@ class Service:
             "short_link": custom_alias
         }
     
+
+    async def get_links_overview(self, user_id: int):
+        return await self.repository.get_links_overview(user_id)
+    
     
     async def find_short_link_by_original_url(self, original_url: str) -> Optional[dict]:
         logging.info("Попали в сервисный класс")

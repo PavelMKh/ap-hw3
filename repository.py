@@ -25,15 +25,21 @@ class Repository:
             await conn.execute("""
                 DROP TABLE IF EXISTS links;
             """)
+
+
             await conn.execute("""
                 DROP TABLE IF EXISTS users;
             """)
+
+
             await conn.execute("""
                 CREATE TABLE IF NOT EXISTS users (
                     id SERIAL PRIMARY KEY,
                     token TEXT NOT NULL
                 );
             """)
+
+
             await conn.execute("""
                 CREATE TABLE IF NOT EXISTS links (
                     id SERIAL PRIMARY KEY,
@@ -45,6 +51,8 @@ class Repository:
                     is_authorized BOOLEAN DEFAULT FALSE
                 );
             """)
+
+
             await conn.execute("""
                 CREATE TABLE IF NOT EXISTS statistics (
                     id SERIAL PRIMARY KEY,
@@ -52,6 +60,22 @@ class Repository:
                     access_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
             """)
+
+
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS expired_links (
+                    id SERIAL PRIMARY KEY,
+                    full_link VARCHAR(255) NOT NULL,
+                    short_link VARCHAR(255) NOT NULL,
+                    created_at TIMESTAMP,
+                    expires_at TIMESTAMP,
+                    deleted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    user_id INTEGER,
+                    is_authorized BOOLEAN DEFAULT FALSE
+                );
+            """)
+
+
             await conn.execute("""
                 INSERT INTO users (id, token)
                 VALUES (1, 'token1'), (2, 'token2');
@@ -191,10 +215,44 @@ class Repository:
     
     async def delete_expired_links(self):
         async with self.pool.acquire() as conn:
-            await conn.execute("""
-                DELETE FROM links WHERE expires_at IS NOT NULL AND expires_at < CURRENT_TIMESTAMP
-            """)
-            
+            async with conn.transaction():
+                await conn.execute("""
+                    INSERT INTO expired_links (full_link, short_link, created_at, expires_at, user_id, is_authorized)
+                    SELECT full_link, short_link, created_at, expires_at, user_id, is_authorized
+                    FROM links
+                    WHERE expires_at IS NOT NULL AND expires_at < CURRENT_TIMESTAMP
+                """)
+                
+                await conn.execute("""
+                    DELETE FROM links WHERE expires_at IS NOT NULL AND expires_at < CURRENT_TIMESTAMP
+                """)
+
+
+    async def get_links_overview(self, user_id: int):
+        async with self.pool.acquire() as conn:
+            async with conn.transaction():    
+                active_links_count = await conn.fetchval("""
+                        SELECT COUNT(*) 
+                        FROM links 
+                        WHERE user_id = $1 AND expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP;
+                    """, int(user_id))
+                    
+                if active_links_count is None:
+                        active_links_count = 0
+                    
+                expired_links_count = await conn.fetchval("""
+                        SELECT COUNT(*) 
+                        FROM expired_links 
+                        WHERE user_id = $1;
+                    """, int(user_id))
+                    
+                if expired_links_count is None:
+                        expired_links_count = 0
+                    
+                return {
+                        "active_links": active_links_count,
+                        "expired_links": expired_links_count
+                    }
 
     async def close(self):
         if self.pool:
