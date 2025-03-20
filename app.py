@@ -25,6 +25,7 @@ repo = Repository(db_url)
 service = Service(repo)
 redis = aioredis.from_url("redis://localhost", decode_responses=True)
 
+
 @my_app.on_event("startup")
 async def startup_event():
     await repo.connect()
@@ -34,10 +35,12 @@ async def startup_event():
     scheduler.add_job(delete_expired_links, 'interval', minutes=1) 
     scheduler.start()
 
+
 @my_app.on_event("shutdown")
 async def shutdown_event():
     scheduler.shutdown()
     await repo.close()
+
 
 @my_app.post('/links/shorten')
 @cache(expire=60)
@@ -63,7 +66,8 @@ async def create_short_link(request: Request, link_request: LinkRequest):
             return JSONResponse(content={"short_link": result['short_link']}, status_code=201)
         else:
             raise HTTPException(status_code=500, detail="Failed to shorten link")
-        
+
+
 @my_app.get('/links/{short_code}')
 @cache(expire=60)
 async def redirect_to_original_url(short_code: str):
@@ -74,6 +78,7 @@ async def redirect_to_original_url(short_code: str):
     else:
         raise HTTPException(status_code=404, detail="Link not found")
     
+
 
 @my_app.delete('/links/{short_code}')
 @cache(expire=0)
@@ -90,7 +95,8 @@ async def delete_link(short_code: str, request: Request):
             raise HTTPException(status_code=403, detail="Forbidden")
     else:
         raise HTTPException(status_code=401, detail="Unauthorized")
-    
+
+
 @my_app.put('/links/{short_code}')
 @cache(expire=0)
 async def update_link(short_code: str, request: Request, link_request: LinkRequest):
@@ -106,7 +112,8 @@ async def update_link(short_code: str, request: Request, link_request: LinkReque
             raise HTTPException(status_code=403, detail="Forbidden")
     else:
         raise HTTPException(status_code=401, detail="Unauthorized")
-    
+
+
 @my_app.get('/links/{short_code}/stats')
 @cache(expire=60)
 async def get_stats(short_code: str, request: Request):
@@ -129,6 +136,7 @@ async def get_stats(short_code: str, request: Request):
         raise HTTPException(status_code=403, detail="Stats not found")
     
     return JSONResponse(content=stats, media_type="application/json")
+
 
 
 @my_app.post('/links/custom_shorten')
@@ -155,7 +163,8 @@ async def create_custom_short_link(request: Request, link_request: CustomLinkReq
             return JSONResponse(content={"short_link": result['short_link']}, status_code=201)
         else:
             raise HTTPException(status_code=500, detail="Failed to shorten link")
-        
+
+
 @my_app.get('/search')
 @cache(expire=60)
 async def search_link_by_original_url(original_url: str):
@@ -173,6 +182,7 @@ async def search_link_by_original_url(original_url: str):
         }
     else:
         raise HTTPException(status_code=404, detail="Link not found")
+
 
 @my_app.get('/overview')
 @cache(expire=60)
