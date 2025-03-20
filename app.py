@@ -23,7 +23,9 @@ scheduler = AsyncIOScheduler()
 db_url = os.environ.get('DATABASE_URL')
 repo = Repository(db_url)
 service = Service(repo)
-redis = aioredis.from_url("redis://localhost", decode_responses=True)
+
+redis_url = os.environ.get('REDIS_URL', 'redis://localhost:6379')
+redis = aioredis.from_url(redis_url, decode_responses=True)
 
 
 @my_app.on_event("startup")
@@ -90,6 +92,7 @@ async def delete_link(short_code: str, request: Request):
 
     if user_id and token:
         if await service.delete_link(short_code, int(user_id), token):
+            await redis.delete(f"fastapi-cache:{short_code}")
             return {"message": "Link has been deleted"}
         else:
             raise HTTPException(status_code=403, detail="Forbidden")
@@ -107,6 +110,7 @@ async def update_link(short_code: str, request: Request, link_request: LinkReque
     
     if user_id and token:
         if await service.update_url(short_code, link_request.link, int(user_id), token):
+            await redis.delete(f"fastapi-cache:{short_code}")
             return {"message": "Link has been updated"}
         else:
             raise HTTPException(status_code=403, detail="Forbidden")

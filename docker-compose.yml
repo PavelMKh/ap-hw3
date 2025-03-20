@@ -22,4 +22,9 @@ services:
       - "8000:8000"
     environment:
       - DATABASE_URL=postgresql://myuser:mypassword@db:5432/mydb
-      - TINY_URL_TOKEN=${TINY_URL_TOKEN}
+      - REDIS_URL=redis://redis:6379
+
+  redis:
+    image: redis:latest
+    ports:
+      - "6379:6379"
