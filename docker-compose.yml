@@ -21,7 +21,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql://myuser:mypassword@db:5432/mydb
+      - DATABASE_URL=postgresql://myuser:mypassword@127.0.0.1:5432/mydb
       - REDIS_URL=redis://redis:6379
 
   redis:
