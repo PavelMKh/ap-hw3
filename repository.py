@@ -31,6 +31,14 @@ class Repository:
                 DROP TABLE IF EXISTS users;
             """)
 
+            await conn.execute("""
+                DROP TABLE IF EXISTS expired_links;
+            """)
+
+            await conn.execute("""
+                DROP TABLE IF EXISTS statistics;
+            """)
+
 
             await conn.execute("""
                 CREATE TABLE IF NOT EXISTS users (
